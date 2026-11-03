@@ -123,7 +123,7 @@ async function profile(value,byName=false){
   $('profile-content').innerHTML=`<div class="profile-inner"><button class="profile-close" data-close-profile aria-label="Close profile">×</button><section class="w-full h-fit text-center py-2 flex items-center justify-center flex-col space-y-4"><span class="m-auto size-28 overflow-clip border-2 border-[var(--frame-color)] bg-slate-800 rounded-full flex items-center justify-center pt-3.5" style="border-color:var(--placement-${rank&&rank<=3?rank:'other'})">${skin(p,95,95)}</span><h1 class="text-3xl font-bold !bg-clip-text text-slate-300">${esc(p.name)}</h1><h2 class="flex gap-2 items-center justify-center text-muted font-medium text-lg px-3 py-1 rounded-full cursor-default" style="color:${title.fg};background:${title.bg}" title="${title.min?`Obtained ${title.min}+ total points.`:'Starting rank'}"><img src="${asset('titles/'+title.file)}" width="30" height="30" alt="Achievement Icon">${title.title}</h2><h3 class="text-xl font-bold text-muted">${esc(regionNames[p.region]||'Unknown')}</h3><a class="bg-secondary rounded-xl text-sm flex items-center p-2 gap-2 hover:bg-secondary/90 text-muted-foreground hover:text-secondary-foreground duration-100" href="https://namemc.com/profile/${encodeURIComponent(p.uuid)}" target="_blank" rel="noopener noreferrer"><span class="pr-1 flex items-center justify-center border-r-2 border-muted"><img src="${asset('icons/namemc.png')}" height="20" width="20" alt="NameMC" class="object-contain rounded-sm"></span><span class="flex gap-1 items-center">NameMC <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6m0-6L10 14M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/></svg></span></a></section><section class="w-full h-fit space-y-6"><div class="w-full space-y-2"><h2 class="text-2xl text-muted-foreground font-medium">POSITION</h2><div class="h-12 profile-box_styles"><div class="${rank>9999?'w-40':rank>99?'w-32':'w-24'} h-full flex p-2 items-center relative truncate"><img src="${asset('placements/'+(rank&&rank<4?rank+'-shimmer.svg':'other.svg'))}" class="absolute inset-0 size-full" alt="shimmer"><strong class="w-full font-bold text-4xl max-sm:text-3xl italic absolute truncate drop-shadow-[0px_3px_1px_#232323]" title="Overall placement">${rank}.</strong></div><div class="flex gap-2 items-center"><img src="${asset('tier_icons/overall.svg')}" width="26" height="26" alt="Overall"><strong class="text-2xl max-sm:text-xl">OVERALL</strong><span class="text-xl text-slate-400 font-medium max-sm:text-sm">(${Number(p.points)} points)</span></div></div></div><div class="w-full h-fit space-y-2"><h2 class="text-2xl text-muted-foreground font-medium">TIERS</h2><div class="profile-box_styles p-2">${tierSlots(p.rankings)}</div></div></section></div>`;
  }catch(e){if(id===profileId)$('profile-content').innerHTML=`<div class="profile-inner"><button class="profile-close" data-close-profile aria-label="Close profile">×</button><div class="error-state"><h2 class="text-2xl font-bold">${esc(e.message)}</h2><p>Search for a Minecraft username to view their profile.</p></div></div>`;}
 }
-function closeProfile(){$('profile-modal').close();profileId++;document.body.style.overflow='';}
+function closeProfile(){hideTierTooltip();$('profile-modal').close();profileId++;document.body.style.overflow='';}
 function renderDiscords(){
  $('discord-menu').innerHTML=MODES.filter(m=>m[0]!=='overall').map(([key,name,icon,url])=>{const link=TIERLIST_DISCORD;return `<a href="${esc(isSafeURL(link)?link:'https://discord.gg/halotiers')}" target="_blank" rel="noopener noreferrer"><img src="${asset('tier_icons/'+icon)}" alt="">${esc(name)}</a>`;}).join('');
  $('mobile-menu').innerHTML='<span class="p-2 text-muted flex">Home</span><a href="/rankings/overall">Rankings</a><a href="https://discord.gg/halotiers" target="_blank" rel="noopener noreferrer">Discords</a><a href="https://api.artefact-studio.dev/docs/v2" target="_blank" rel="noopener noreferrer">API Docs</a>';
@@ -169,3 +169,47 @@ $('information-toggle').addEventListener('click',()=>{const show=$('information-
 $('information-popover').addEventListener('click',e=>{const tab=e.target.closest('[data-info-tab]');if(tab){infoTab=tab.dataset.infoTab;renderInformation();}});
 window.addEventListener('resize',positionInformation);window.addEventListener('scroll',positionInformation,{passive:true});window.addEventListener('popstate',route);window.addEventListener('hashchange',route);
 (async()=>{try{modes=await api('/mode/list');for(const [key,m] of Object.entries(modes)){if(!MODES.some(v=>v[0]===key))MODES.push([key,m.title,'vanilla.svg',TIERLIST_DISCORD]);}renderDiscords();route();}catch{renderDiscords();route();}})();
+
+// A top-layer tooltip avoids clipping inside both scroll boxes and modal dialogs.
+const tierHoverCard=document.createElement('div');
+tierHoverCard.id='tier-hover-card';
+tierHoverCard.className='tier-hover-card';
+tierHoverCard.setAttribute('popover','manual');
+tierHoverCard.setAttribute('role','tooltip');
+document.body.append(tierHoverCard);
+let tierHoverTarget=null,tierHoverFrame;
+function hideTierTooltip(){
+ if(tierHoverTarget)tierHoverTarget.removeAttribute('aria-describedby');
+ tierHoverTarget=null;cancelAnimationFrame(tierHoverFrame);
+ if(tierHoverCard.matches(':popover-open'))tierHoverCard.hidePopover();
+}
+function positionTierTooltip(){
+ if(!tierHoverTarget?.isConnected){hideTierTooltip();return;}
+ const b=tierHoverTarget.getBoundingClientRect(),w=tierHoverCard.offsetWidth,h=tierHoverCard.offsetHeight;
+ const below=b.top<h+8;
+ const left=Math.max(8,Math.min(b.left+b.width/2-w/2,innerWidth-w-8));
+ tierHoverCard.dataset.side=below?'bottom':'top';
+ tierHoverCard.style.left=left+'px';
+ tierHoverCard.style.top=Math.max(8,Math.min(below?b.bottom+6:b.top-h-6,innerHeight-h-8))+'px';
+ tierHoverCard.style.setProperty('--tooltip-arrow',Math.max(10,Math.min(w-10,b.left+b.width/2-left))+'px');
+ tierHoverFrame=requestAnimationFrame(positionTierTooltip);
+}
+function showTierTooltip(target){
+ if(tierHoverTarget===target)return;
+ hideTierTooltip();tierHoverTarget=target;
+ const [title,points]=target.dataset.tooltip.split('\n');
+ const heading=document.createElement('strong'),detail=document.createElement('span');
+ heading.textContent=title;detail.textContent=points;
+ tierHoverCard.replaceChildren(heading,detail);
+ target.setAttribute('aria-describedby',tierHoverCard.id);
+ tierHoverCard.showPopover();positionTierTooltip();
+}
+document.addEventListener('pointerover',e=>{const target=e.target.closest('.tier-tooltip');if(target&&e.pointerType!=='touch')showTierTooltip(target);});
+document.addEventListener('pointerout',e=>{if(tierHoverTarget?.contains(e.target)&&!tierHoverTarget.contains(e.relatedTarget))hideTierTooltip();});
+document.addEventListener('focusin',e=>{const target=e.target.closest('.tier-tooltip');if(target)showTierTooltip(target);});
+document.addEventListener('focusout',e=>{if(tierHoverTarget?.contains(e.target))hideTierTooltip();});
+document.addEventListener('pointerdown',hideTierTooltip);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hideTierTooltip();});
+window.addEventListener('scroll',hideTierTooltip,true);
+window.addEventListener('resize',hideTierTooltip);
+$('profile-modal').addEventListener('close',hideTierTooltip);
