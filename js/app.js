@@ -174,14 +174,24 @@ window.addEventListener('resize',positionInformation);window.addEventListener('s
 const tierHoverCard=document.createElement('div');
 tierHoverCard.id='tier-hover-card';
 tierHoverCard.className='tier-hover-card';
-tierHoverCard.setAttribute('popover','manual');
+const tierPopoverSupported=typeof tierHoverCard.showPopover==='function';
+if(tierPopoverSupported)tierHoverCard.setAttribute('popover','manual');
+tierHoverCard.hidden=true;
 tierHoverCard.setAttribute('role','tooltip');
 document.body.append(tierHoverCard);
-let tierHoverTarget=null,tierHoverFrame;
-function hideTierTooltip(){
+let tierHoverTarget=null,tierHoverFrame,tierHoverCloseTimer;
+function hideTierTooltip(immediate=false){
  if(tierHoverTarget)tierHoverTarget.removeAttribute('aria-describedby');
  tierHoverTarget=null;cancelAnimationFrame(tierHoverFrame);
- if(tierHoverCard.matches(':popover-open'))tierHoverCard.hidePopover();
+ clearTimeout(tierHoverCloseTimer);
+ const finish=()=>{
+  if(tierPopoverSupported&&tierHoverCard.matches(':popover-open'))tierHoverCard.hidePopover();
+  tierHoverCard.hidden=true;
+  delete tierHoverCard.dataset.state;
+ };
+ if(immediate===true||tierHoverCard.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches){finish();return;}
+ tierHoverCard.dataset.state='closed';
+ tierHoverCloseTimer=setTimeout(finish,140);
 }
 function positionTierTooltip(){
  if(!tierHoverTarget?.isConnected){hideTierTooltip();return;}
@@ -196,15 +206,21 @@ function positionTierTooltip(){
 }
 function showTierTooltip(target){
  if(tierHoverTarget===target)return;
- hideTierTooltip();tierHoverTarget=target;
+ hideTierTooltip(true);tierHoverTarget=target;
  const [title,points]=target.dataset.tooltip.split('\n');
  const heading=document.createElement('strong'),detail=document.createElement('span');
  heading.textContent=title;detail.textContent=points;
  tierHoverCard.replaceChildren(heading,detail);
  target.setAttribute('aria-describedby',tierHoverCard.id);
- tierHoverCard.showPopover();positionTierTooltip();
+ // Keep the fallback inside the modal so it remains above its backdrop.
+ if(!tierPopoverSupported)(target.closest('dialog')||document.body).append(tierHoverCard);
+ tierHoverCard.hidden=false;
+ if(tierPopoverSupported)tierHoverCard.showPopover();
+ positionTierTooltip();
 }
 document.addEventListener('pointerover',e=>{const target=e.target.closest('.tier-tooltip');if(target&&e.pointerType!=='touch')showTierTooltip(target);});
+// Scrolling or a results refresh can dismiss a tooltip without another pointerover.
+document.addEventListener('pointermove',e=>{const target=e.target.closest('.tier-tooltip');if(target&&e.pointerType!=='touch')showTierTooltip(target);});
 document.addEventListener('pointerout',e=>{if(tierHoverTarget?.contains(e.target)&&!tierHoverTarget.contains(e.relatedTarget))hideTierTooltip();});
 document.addEventListener('focusin',e=>{const target=e.target.closest('.tier-tooltip');if(target)showTierTooltip(target);});
 document.addEventListener('focusout',e=>{if(tierHoverTarget?.contains(e.target))hideTierTooltip();});
